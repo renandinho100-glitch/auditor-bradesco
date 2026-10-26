@@ -11,7 +11,7 @@ class BradescoAuditor:
         self.materiais = pd.DataFrame(self.dados.get("tabela_materiais_gig", []))
 
     def ler_xml_tiss(self, arquivo_xml):
-        """Lê o ficheiro XML TISS de forma flexível e extrai os procedimentos e materiais."""
+        """Lê o ficheiro XML TISS extraindo procedimentos e itens de outrasDespesas."""
         try:
             xml_bytes = arquivo_xml.getvalue()
             root = ET.fromstring(xml_bytes)
@@ -26,35 +26,33 @@ class BradescoAuditor:
         procedimentos_encontrados = []
         materiais_encontrados = []
 
-        # Variações comuns de tags de procedimentos no padrão TISS
-        tags_proc = ['procedimentoExecutado', 'procedimentoRealizado', 'procedimento', 'procedimentoADT']
-        for tag in tags_proc:
-            for proc in root.iter(tag):
-                codigo = proc.findtext('codigoProcedimento') or proc.findtext('codigoTUSS') or proc.findtext('codigo')
-                descricao = proc.findtext('descricaoProcedimento') or proc.findtext('descricao')
-                valor = proc.findtext('valorExecutado') or proc.findtext('valor') or proc.findtext('valorTotal')
-                if codigo and not any(p['codigo'] == codigo for p in procedimentos_encontrados):
-                    procedimentos_encontrados.append({
-                        "codigo": codigo,
-                        "descricao": descricao or "Procedimento TUSS",
-                        "valor": float(valor) if valor and valor.replace('.', '', 1).isdigit() else 0.0
-                    })
+        # 1. Extração de Procedimentos Executados
+        for proc in root.iter('procedimentoExecutado'):
+            codigo = proc.findtext('codigoProcedimento')
+            descricao = proc.findtext('descricaoProcedimento')
+            valor = proc.findtext('valorUnitario') or proc.findtext('valorTotal')
+            
+            if codigo:
+                procedimentos_encontrados.append({
+                    "codigo": codigo,
+                    "descricao": descricao or "Procedimento TUSS",
+                    "valor": float(valor.replace(',', '.')) if valor and valor.replace('.', '', 1).isdigit() else 0.0
+                })
 
-        # Variações comuns de tags de materiais e despesas no padrão TISS
-        tags_mat = ['materialConsumido', 'outrasDespesas', 'despesa', 'itemServico', 'materialMedicamento']
-        for tag in tags_mat:
-            for mat in root.iter(tag):
-                codigo_mat = mat.findtext('codigoItem') or mat.findtext('codigoMaterial') or mat.findtext('codigo')
-                desc_mat = mat.findtext('descricaoItem') or mat.findtext('descricao')
-                qtd = mat.findtext('quantidadeExecutada') or mat.findtext('quantidade')
-                valor_unit = mat.findtext('valorUnitario') or mat.findtext('valor')
-                if codigo_mat and not any(m['codigo'] == codigo_mat for m in materiais_encontrados):
-                    materiais_encontrados.append({
-                        "codigo": codigo_mat,
-                        "descricao": desc_mat or "Material/Insumo",
-                        "quantidade": float(qtd) if qtd and qtd.replace('.', '', 1).isdigit() else 1.0,
-                        "valor_unitario": float(valor_unit) if valor_unit and valor_unit.replace('.', '', 1).isdigit() else 0.0
-                    })
+        # 2. Extração de Materiais / Medicamentos / Taxas a partir de outrasDespesas -> servicosExecutados
+        for serv in root.iter('servicosExecutados'):
+            codigo = serv.findtext('codigoProcedimento') or serv.findtext('codigoItem') or serv.findtext('codigoMaterial')
+            descricao = serv.findtext('descricaoProcedimento') or serv.findtext('descricaoItem')
+            qtd = serv.findtext('quantidadeExecutada')
+            valor_unit = serv.findtext('valorUnitario')
+            
+            if codigo:
+                materiais_encontrados.append({
+                    "codigo": codigo,
+                    "descricao": descricao or "Material / Taxa / Insumo",
+                    "quantidade": float(qtd.replace(',', '.')) if qtd and qtd.replace('.', '', 1).isdigit() else 1.0,
+                    "valor_unitario": float(valor_unit.replace(',', '.')) if valor_unit and valor_unit.replace('.', '', 1).isdigit() else 0.0
+                })
 
         return {
             "procedimentos": procedimentos_encontrados,
@@ -62,22 +60,25 @@ class BradescoAuditor:
         }, None
 
     def auditar_conta(self, dados_tiss):
-        """Cruza os dados do TISS com as regras de pacotes e tabela GIG."""
+        """Cruza os dados extraídos do XML com as regras da Tabela GIG."""
         codigos_tuss = [p['codigo'] for p in dados_tiss['procedimentos']]
         
-        # 1. Verifica se se enquadra em algum Pacote Padronizado
+        # 1. Identificação de Pacotes
         pacotes_aplicaveis = []
         for _, pacote in self.pacotes.iterrows():
             inclusos = set(pacote['tuss_inclusos'])
             if inclusos.issubset(set(codigos_tuss)):
                 pacotes_aplicaveis.append(pacote['nome_pacote'])
 
-        # 2. Audita materiais contra a Tabela GIG
+        if not pacotes_aplicaveis and any(c in codigos_tuss for c in ['31309054', '31309038']):
+            pacotes_aplicaveis.append("Pacote Cirúrgico Obstétrico (Cesariana)")
+
+        # 2. Auditoria de Materiais e Insumos contra a Tabela GIG
         alertas_materiais = []
         for mat in dados_tiss['materiais']:
             item_gig = self.materiais[self.materiais['id_orizon'] == mat['codigo']]
             if not item_gig.empty:
-                teto = item_gig.iloc[0]['preco_unitario']
+                teto = float(item_gig.iloc[0]['preco_unitario'])
                 if mat['valor_unitario'] > teto:
                     alertas_materiais.append({
                         "item": mat['codigo'],
@@ -87,13 +88,14 @@ class BradescoAuditor:
                         "alerta": "Divergência de Preço (Acima do Teto GIG)"
                     })
             else:
-                if len(pacotes_aplicaveis) > 0:
+                # Se não está na GIG e há pacotes aplicáveis, gera alerta de possível inclusão no pacote
+                if len(pacotes_aplicaveis) > 0 and mat['valor_unitario'] > 0:
                     alertas_materiais.append({
                         "item": mat['codigo'],
                         "descricao": mat['descricao'],
                         "cobrado": mat['valor_unitario'],
                         "teto_permitido": 0.0,
-                        "alerta": "Possível Glosa: Material já incluso no Pacote Padronizado"
+                        "alerta": "Possível Glosa: Item cobrado em separado num procedimento em pacote"
                     })
 
         return {
