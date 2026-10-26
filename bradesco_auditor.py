@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-from bradesco_auditor import BradescoAuditor
 
 st.set_page_config(
     page_title="Auditor de Contas - Bradesco Saúde",
