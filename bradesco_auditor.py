@@ -11,14 +11,15 @@ class BradescoAuditor:
         self.materiais = pd.DataFrame(self.dados.get("tabela_materiais_gig", []))
 
     def ler_xml_tiss(self, arquivo_xml):
-        """Lê o arquivo XML TISS e extrai os procedimentos e materiais cobrados."""
+        """Lê o ficheiro XML TISS carregado e extrai os procedimentos e materiais."""
         try:
-            tree = ET.parse(arquivo_xml)
-            root = tree.getroot()
+            # Lê os bytes diretamente do ficheiro enviado pelo Streamlit
+            xml_bytes = arquivo_xml.getvalue()
+            root = ET.fromstring(xml_bytes)
         except Exception as e:
-            return None, f"Erro ao ler o XML: {e}"
+            return None, f"Erro ao processar o XML: {e}"
 
-        # Remove namespaces para facilitar a busca das tags TISS independentemente da versão
+        # Remove namespaces para facilitar a pesquisa das tags TISS
         for elem in root.iter():
             if '}' in elem.tag:
                 elem.tag = elem.tag.split('}', 1)[1]
@@ -26,7 +27,7 @@ class BradescoAuditor:
         procedimentos_encontrados = []
         materiais_encontrados = []
 
-        # Varre procedimentos executados (ex: em guias de consulta, SADT ou internação)
+        # Varre os procedimentos executados no XML TISS
         for proc in root.iter('procedimentoExecutado'):
             codigo = proc.findtext('codigoProcedimento')
             descricao = proc.findtext('descricaoProcedimento')
@@ -38,8 +39,8 @@ class BradescoAuditor:
                     "valor": float(valor) if valor else 0.0
                 })
 
-        # Varre materiais / taxas / insumos cobrados
-        for mat in root.iter('materialConsumido'): # ou tags equivalentes de insumos do lote
+        # Varre os materiais / taxas / insumos cobrados
+        for mat in root.iter('materialConsumido'):
             codigo_mat = mat.findtext('codigoItem') or mat.findtext('codigoMaterial')
             desc_mat = mat.findtext('descricaoItem')
             qtd = mat.findtext('quantidadeExecutada')
