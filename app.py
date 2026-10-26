@@ -9,29 +9,27 @@ st.set_page_config(
 )
 
 st.title("🏥 Painel de Auditoria e Prevenção de Glosas")
-st.markdown("Ferramenta integrada de cruzamento de guias e regras do Bradesco Saúde.")
+st.markdown("Ferramenta para cruzamento de contas médicas com base nos Aditivos e Tabelas GIG do Bradesco Saúde.")
 
-# Inicializando o auditor com o JSON de regras do repositório
+# Inicializar o auditor
 @st.cache_resource
 def carregar_auditor():
     return BradescoAuditor("schema_bradesco_gig.json")
 
 try:
     auditor = carregar_auditor()
-    st.sidebar.success("Base de regras GIG carregada com sucesso!")
+    st.sidebar.success("Base de regras carregada com sucesso!")
 except Exception as e:
     st.sidebar.error(f"Erro ao carregar regras: {e}")
 
-# Área de Upload
-uploaded_file = st.sidebar.file_uploader("Envie sua planilha de lançamentos (CSV)", type=["csv"])
+# Sidebar para upload de arquivos
+st.sidebar.header("📁 Importação de Dados")
+uploaded_file = st.sidebar.file_uploader("Envie o arquivo de lançamentos (CSV)", type=["csv"])
 
 if uploaded_file is not None:
     df = pd.read_csv(uploaded_file)
-    st.subheader("📊 Prévia dos Dados Carregados")
+    st.success("Arquivo carregado com sucesso!")
+    st.subheader("📊 Prévia dos Dados")
     st.dataframe(df.head())
-    
-    if st.button("Executar Auditoria"):
-        st.success("Auditoria simulada com sucesso!")
-        # Aqui você pode chamar os métodos do seu auditor no futuro
 else:
-    st.info("👈 Envie um arquivo CSV na barra lateral para começar a análise.")
+    st.info("👈 Por favor, faça o upload de um arquivo CSV na barra lateral para iniciar a auditoria.")
