@@ -1,0 +1,47 @@
+{
+  "versao_tabela": "2026.1",
+  "operadora": "Bradesco Saúde",
+  "pacotes_padronizados": [
+    {
+      "codigo_pacote": "84451874",
+      "nome_pacote": "PACOTE CIRURGIA CESARIANA",
+      "valor_limite": 6700.00,
+      "tuss_inclusos": [
+        "31309054",
+        "31309038",
+        "31300100"
+      ],
+      "observacoes": "Inclui taxas, honorários de equipe básica do pacote, gases, medicamentos e materiais de consumo gerais."
+    },
+    {
+      "codigo_pacote": "84451900",
+      "nome_pacote": "PACOTE CIRURGIA BARIATRICA VIDEOLAPAROSCÓPICA",
+      "valor_limite": 14500.00,
+      "tuss_inclusos": [
+        "31001234",
+        "31005678"
+      ],
+      "observacoes": "Inclui taxa de vídeo e materiais standard."
+    }
+  ],
+  "tabela_materiais_gig": [
+    {
+      "id_orizon": "MAT-001",
+      "descricao": "FIO DE SUTURA VICRYL 2-0",
+      "preco_unitario": 45.50,
+      "classificacao": "Consumo Geral (Incluso no Pacote)"
+    },
+    {
+      "id_orizon": "MAT-002",
+      "descricao": "CATETER VENOSO CENTRAL DUPLO LUMEN",
+      "preco_unitario": 180.00,
+      "classificacao": "Exceção Justificável"
+    },
+    {
+      "id_orizon": "MAT-003",
+      "descricao": "EQUIPO DE INFUSAO CONTINUA",
+      "preco_unitario": 12.30,
+      "classificacao": "Consumo Geral (Incluso no Pacote)"
+    }
+  ]
+}
