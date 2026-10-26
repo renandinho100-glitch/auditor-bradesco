@@ -8,8 +8,8 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("🏥 Painel de Auditoria e Prevenção de Glosas")
-st.markdown("Ferramenta para cruzamento de contas médicas com base nos Aditivos e Tabelas GIG do Bradesco Saúde.")
+st.title("🏥 Painel de Auditoria e Prevenção de Glosas (XML TISS)")
+st.markdown("Faça o upload do arquivo XML de faturamento para cruzar com as regras e pacotes do Bradesco Saúde.")
 
 # Inicializar o auditor
 @st.cache_resource
@@ -18,18 +18,46 @@ def carregar_auditor():
 
 try:
     auditor = carregar_auditor()
-    st.sidebar.success("Base de regras carregada com sucesso!")
+    st.sidebar.success("Base de regras GIG carregada com sucesso!")
 except Exception as e:
     st.sidebar.error(f"Erro ao carregar regras: {e}")
 
-# Sidebar para upload de arquivos
-st.sidebar.header("📁 Importação de Dados")
-uploaded_file = st.sidebar.file_uploader("Envie o arquivo de lançamentos (CSV)", type=["csv"])
+# Sidebar para upload de XML TISS
+st.sidebar.header("📁 Importação de Lote")
+uploaded_file = st.sidebar.file_uploader("Envie o arquivo XML TISS", type=["xml"])
 
 if uploaded_file is not None:
-    df = pd.read_csv(uploaded_file)
-    st.success("Arquivo carregado com sucesso!")
-    st.subheader("📊 Prévia dos Dados")
-    st.dataframe(df.head())
+    # Processa o XML utilizando a classe auditora
+    dados_tiss, erro = auditor.ler_xml_tiss(uploaded_file)
+    
+    if erro:
+        st.error(erro)
+    else:
+        st.success("Arquivo XML TISS lido com sucesso!")
+        
+        # Executa a auditoria
+        resultado = auditor.auditar_conta(dados_tiss)
+        
+        # Exibição de Métricas
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Procedimentos TUSS Lidos", resultado["total_procedimentos"])
+        col2.metric("Materiais / Insumos Lidos", resultado["total_materiais"])
+        col3.metric("Pacotes Padronizados Detectados", len(resultado["pacotes_encontrados"]))
+        
+        # Detalhes dos Pacotes
+        if resultado["pacotes_encontrados"]:
+            st.info(f"💡 **Pacotes Aplicáveis Identificados:** {', '.join(resultado['pacotes_encontrados'])}")
+        
+        # Alertas de Materiais / Glosas
+        st.subheader("⚠️ Relatório de Alertas e Divergências")
+        if resultado["alertas_materiais"]:
+            df_alertas = pd.DataFrame(resultado["alertas_materiais"])
+            st.dataframe(df_alertas, use_container_width=True)
+        else:
+            st.success("Nenhuma divergência ou risco de glosa encontrado nos materiais deste arquivo!")
+            
+        # Exibir listagem pura dos procedimentos extraídos
+        with st.expander("Ver Procedimentos Extraídos do XML"):
+            st.dataframe(pd.DataFrame(dados_tiss["procedimentos"]), use_container_width=True)
 else:
-    st.info("👈 Por favor, faça o upload de um arquivo CSV na barra lateral para iniciar a auditoria.")
+    st.info("👈 Envie um arquivo XML TISS na barra lateral para iniciar a auditoria automatizada.")
