@@ -13,7 +13,6 @@ class BradescoAuditor:
     def ler_xml_tiss(self, arquivo_xml):
         """Lê o ficheiro XML TISS carregado e extrai os procedimentos e materiais."""
         try:
-            # Lê os bytes diretamente do ficheiro enviado pelo Streamlit
             xml_bytes = arquivo_xml.getvalue()
             root = ET.fromstring(xml_bytes)
         except Exception as e:
