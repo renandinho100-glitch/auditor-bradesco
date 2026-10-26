@@ -1,34 +1,36 @@
-import streamlit as st
+import json
 import pandas as pd
 
-st.set_page_config(
-    page_title="Auditor de Contas - Bradesco Saúde",
-    page_icon="🏥",
-    layout="wide"
-)
+class BradescoAuditor:
+    def __init__(self, caminho_schema: str):
+        with open(caminho_schema, 'r', encoding='utf-8') as f:
+            self.dados = json.load(f)
+        
+        self.pacotes = pd.DataFrame(self.dados.get("pacotes_padronizados", []))
+        self.materiais = pd.DataFrame(self.dados.get("tabela_materiais_gig", []))
 
-st.title("🏥 Painel de Auditoria e Prevenção de Glosas")
-st.markdown("Ferramenta para cruzamento de contas médicas com base nos Aditivos e Tabelas GIG do Bradesco Saúde.")
+    def validar_pacote_procedimento(self, lista_tuss_executados: list):
+        """Identifica se os códigos TUSS executados correspondem a algum pacote padronizado."""
+        encontrados = []
+        for _, pacote in self.pacotes.iterrows():
+            inclusos = set(pacote['tuss_inclusos'])
+            if inclusos.issubset(set(lista_tuss_executados)):
+                encontrados.append({
+                    "codigo_pacote": pacote['codigo_pacote'],
+                    "nome_pacote": pacote['nome_pacote'],
+                    "valor_limite": pacote['valor_limite']
+                })
+        return encontrados
 
-# Inicializar o auditor
-@st.cache_resource
-def carregar_auditor():
-    return BradescoAuditor("schema_bradesco_gig.json")
-
-auditor = carregar_auditor()
-
-# Sidebar para upload de arquivos
-st.sidebar.header("📁 Importação de Dados")
-uploaded_file = st.sidebar.file_uploader("Envie o arquivo de lançamentos (CSV ou XML)", type=["csv", "xml"])
-
-if uploaded_file is not None:
-    st.success("Arquivo carregado com sucesso!")
-    # Aqui você colocaria a lógica para ler o arquivo com pandas e rodar o auditor.
-    # Exemplo visual:
-    st.subheader("📊 Resumo da Auditoria")
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Total de Itens Analisados", "142")
-    col2.metric("Potenciais Glosas Evitadas", "R$ 1.250,00", delta="-12%")
-    col3.metric("Pacotes Identificados", "18")
-else:
-    st.info("👈 Por favor, faça o upload de um arquivo na barra lateral para iniciar a auditoria.")
+    def auditar_item_material(self, id_orizon: str, valor_cobrado: float):
+        """Verifica se o material está na tabela GIG e se o preço está dentro do teto."""
+        material = self.materiais[self.materiais['id_orizon'] == id_orizon]
+        if material.empty:
+            return {"status": "GLOSA", "motivo": "Material não encontrado na Tabela GIG"}
+        
+        preco_tabela = material.iloc[0]['preco_unitario']
+        if valor_cobrado > preco_tabela:
+        
+            return {"status": "DIVERGÊNCIA DE PREÇO", "teto": preco_tabela, "cobrado": valor_cobrado}
+        
+        return {"status": "APROVADO"}
